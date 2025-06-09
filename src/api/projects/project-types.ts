@@ -11,13 +11,13 @@ export interface Project extends TickTickBaseEntity {
   viewMode: ViewMode;
   permission: Permission;
   kind: ProjectKind;
-  sortOrder: number;
-  sortType: SortType;
-  userCount: number;
-  etag: string;
+  sortOrder?: number;
+  sortType?: SortType;
+  userCount?: number;
+  etag?: string;
   closed: boolean;
-  muted: boolean;
-  transferred: boolean;
+  muted?: boolean;
+  transferred?: boolean;
   groupId?: string;
   timeline?: boolean;
   teamId?: string;
@@ -32,16 +32,14 @@ export enum ViewMode {
 }
 
 export enum Permission {
-  OWNER = 'owner',
-  ADMIN = 'admin',
-  MEMBER = 'member',
-  GUEST = 'guest',
+  READ = 'read',
+  WRITE = 'write',
+  COMMENT = 'comment',
 }
 
 export enum ProjectKind {
-  PERSONAL = 'PERSONAL',
-  SHARED = 'SHARED',
-  TEAM = 'TEAM',
+  TASK = 'TASK',
+  NOTE = 'NOTE',
 }
 
 export enum SortType {
@@ -63,22 +61,19 @@ export interface Permission2 {
 export interface ProjectCreateRequest {
   name: string;
   color?: string;
+  sortOrder?: number;
   viewMode?: ViewMode;
   kind?: ProjectKind;
-  sortType?: SortType;
-  timeline?: boolean;
-  tags?: Tag[];
 }
 
 export interface ProjectUpdateRequest {
   name?: string;
   color?: string;
+  sortOrder?: number;
   viewMode?: ViewMode;
-  sortType?: SortType;
+  kind?: ProjectKind;
   closed?: boolean;
   muted?: boolean;
-  timeline?: boolean;
-  tags?: Tag[];
 }
 
 export interface ProjectFilter {

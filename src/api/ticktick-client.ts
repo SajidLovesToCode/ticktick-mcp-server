@@ -9,6 +9,8 @@ import { OAuthManager } from '../auth/oauth-manager.js';
 import { AuthConfig, DEFAULT_OAUTH_URLS, DEFAULT_SCOPES, DEFAULT_REDIRECT_URI } from '../auth/config.js';
 import { ConfigurationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 export class TickTickClient {
   private apiClient: TickTickAPIClient;
@@ -17,17 +19,36 @@ export class TickTickClient {
   public projects: ProjectsAPI;
 
   constructor(config?: Partial<AuthConfig>) {
-    // Load configuration from environment variables or provided config
+    // Try to load from ticktick-oauth.keys.json first
+    let fileConfig: Partial<AuthConfig> = {};
+    const configFilePath = join(process.cwd(), 'ticktick-oauth.keys.json');
+    
+    if (existsSync(configFilePath)) {
+      try {
+        const fileContent = readFileSync(configFilePath, 'utf-8');
+        const jsonConfig = JSON.parse(fileContent);
+        fileConfig = {
+          clientId: jsonConfig.client_id,
+          clientSecret: jsonConfig.client_secret,
+          redirectUri: jsonConfig.redirect_uri || DEFAULT_REDIRECT_URI,
+        };
+        logger.info('Loaded configuration from ticktick-oauth.keys.json');
+      } catch (error) {
+        logger.warn('Failed to read ticktick-oauth.keys.json:', error);
+      }
+    }
+
+    // Load configuration with priority: constructor config > file config > environment variables
     const authConfig: AuthConfig = {
-      clientId: config?.clientId || process.env.TICKTICK_CLIENT_ID || '',
-      clientSecret: config?.clientSecret || process.env.TICKTICK_CLIENT_SECRET || '',
-      redirectUri: config?.redirectUri || process.env.TICKTICK_REDIRECT_URI || DEFAULT_REDIRECT_URI,
+      clientId: config?.clientId || fileConfig.clientId || process.env.TICKTICK_CLIENT_ID || '',
+      clientSecret: config?.clientSecret || fileConfig.clientSecret || process.env.TICKTICK_CLIENT_SECRET || '',
+      redirectUri: config?.redirectUri || fileConfig.redirectUri || process.env.TICKTICK_REDIRECT_URI || DEFAULT_REDIRECT_URI,
       scopes: config?.scopes || DEFAULT_SCOPES,
     };
 
     if (!authConfig.clientId || !authConfig.clientSecret) {
       throw new ConfigurationError(
-        'TickTick Client ID and Secret are required. Please set TICKTICK_CLIENT_ID and TICKTICK_CLIENT_SECRET environment variables or provide them in the constructor.'
+        'TickTick Client ID and Secret are required. Please provide them via ticktick-oauth.keys.json file, environment variables (TICKTICK_CLIENT_ID and TICKTICK_CLIENT_SECRET), or in the constructor.'
       );
     }
 
@@ -119,7 +140,8 @@ export class TickTickClient {
   // Health check method
   async healthCheck(): Promise<{ status: 'ok' | 'error'; message: string }> {
     try {
-      await this.getAccountInfo();
+      // Use project list endpoint for health check as it's confirmed to work
+      await this.apiClient.get('/project');
       return { status: 'ok', message: 'TickTick API connection is healthy' };
     } catch (error) {
       return { 

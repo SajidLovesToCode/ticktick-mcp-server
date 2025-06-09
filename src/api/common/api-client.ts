@@ -52,6 +52,14 @@ export class TickTickAPIClient {
     this.axios.interceptors.response.use(
       (response) => response,
       (error) => {
+        logger.error('API Error:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message
+        });
+
         if (error.response) {
           const { status, data } = error.response;
           
@@ -67,8 +75,10 @@ export class TickTickAPIClient {
                 retryAfter ? parseInt(retryAfter) : undefined
               );
             default:
+              const errorMessage = data?.message || data?.error || 
+                                 (typeof data === 'string' ? data : `HTTP ${status} error`);
               throw new APIError(
-                data?.message || `HTTP ${status} error`,
+                errorMessage,
                 status,
                 data
               );

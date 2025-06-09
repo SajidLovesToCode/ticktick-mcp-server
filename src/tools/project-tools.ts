@@ -7,8 +7,23 @@ import {
   Project, 
   ProjectCreateRequest, 
   ProjectUpdateRequest, 
-  ProjectFilter 
+  ProjectFilter,
+  ProjectKind
 } from '../api/projects/project-types.js';
+import {
+  CreateProjectSchema,
+  UpdateProjectSchema,
+  DeleteProjectSchema,
+  ArchiveProjectSchema,
+  UnarchiveProjectSchema,
+  GetProjectSchema,
+  ListProjectsSchema,
+  GetProjectTasksSchema,
+  GetProjectStatsSchema,
+  validate,
+  ValidationError,
+} from '../validation/index.js';
+import { logger } from '../utils/logger.js';
 
 export interface ProjectToolDefinition {
   name: string;
@@ -30,7 +45,7 @@ export class ProjectTools {
             kind: {
               type: 'string',
               description: 'Filter by project kind',
-              enum: ['PERSONAL', 'SHARED', 'TEAM'],
+              enum: ['TASK', 'NOTE'],
             },
             closed: {
               type: 'boolean',
@@ -69,7 +84,11 @@ export class ProjectTools {
             },
             color: {
               type: 'string',
-              description: 'Project color (hex code)',
+              description: 'Project color (hex code, e.g., "#F18181")',
+            },
+            sortOrder: {
+              type: 'number',
+              description: 'Project sort order',
             },
             viewMode: {
               type: 'string',
@@ -78,12 +97,9 @@ export class ProjectTools {
             },
             kind: {
               type: 'string',
-              description: 'Project kind',
-              enum: ['PERSONAL', 'SHARED', 'TEAM'],
-            },
-            timeline: {
-              type: 'boolean',
-              description: 'Enable timeline view',
+              description: 'Project kind (task or note)',
+              enum: ['TASK', 'NOTE'],
+              default: 'TASK',
             },
           },
           required: ['name'],
@@ -107,22 +123,19 @@ export class ProjectTools {
               type: 'string',
               description: 'Project color (hex code)',
             },
+            sortOrder: {
+              type: 'number',
+              description: 'Project sort order',
+            },
             viewMode: {
               type: 'string',
               description: 'Project view mode',
               enum: ['list', 'kanban', 'timeline'],
             },
-            timeline: {
-              type: 'boolean',
-              description: 'Enable timeline view',
-            },
-            closed: {
-              type: 'boolean',
-              description: 'Archive/unarchive project',
-            },
-            muted: {
-              type: 'boolean',
-              description: 'Mute/unmute project notifications',
+            kind: {
+              type: 'string',
+              description: 'Project kind',
+              enum: ['TASK', 'NOTE'],
             },
           },
           required: ['projectId'],
@@ -212,34 +225,55 @@ export class ProjectTools {
   }
 
   async handleToolCall(name: string, args: any): Promise<any> {
-    switch (name) {
-      case 'ticktick_list_projects':
-        return this.handleListProjects(args);
-      case 'ticktick_get_project':
-        return this.handleGetProject(args);
-      case 'ticktick_create_project':
-        return this.handleCreateProject(args);
-      case 'ticktick_update_project':
-        return this.handleUpdateProject(args);
-      case 'ticktick_delete_project':
-        return this.handleDeleteProject(args);
-      case 'ticktick_get_project_tasks':
-        return this.handleGetProjectTasks(args);
-      case 'ticktick_get_project_stats':
-        return this.handleGetProjectStats(args);
-      case 'ticktick_archive_project':
-        return this.handleArchiveProject(args);
-      case 'ticktick_unarchive_project':
-        return this.handleUnarchiveProject(args);
-      default:
-        throw new Error(`Unknown project tool: ${name}`);
+    try {
+      switch (name) {
+        case 'ticktick_list_projects':
+          return await this.handleListProjects(args);
+        case 'ticktick_get_project':
+          return await this.handleGetProject(args);
+        case 'ticktick_create_project':
+          return await this.handleCreateProject(args);
+        case 'ticktick_update_project':
+          return await this.handleUpdateProject(args);
+        case 'ticktick_delete_project':
+          return await this.handleDeleteProject(args);
+        case 'ticktick_get_project_tasks':
+          return await this.handleGetProjectTasks(args);
+        case 'ticktick_get_project_stats':
+          return await this.handleGetProjectStats(args);
+        case 'ticktick_archive_project':
+          return await this.handleArchiveProject(args);
+        case 'ticktick_unarchive_project':
+          return await this.handleUnarchiveProject(args);
+        default:
+          throw new Error(`Unknown project tool: ${name}`);
+      }
+    } catch (error: any) {
+      // Consistent error response format
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error.message}`,
+          },
+        ],
+      };
     }
   }
 
   private async handleListProjects(args: any): Promise<any> {
-    const filter: ProjectFilter = {
+    // Transform closed to includeArchived for validation
+    const validationArgs = {
+      includeArchived: args.closed,
       kind: args.kind,
-      closed: args.closed,
+      search: args.search, // search is not in schema but handled separately
+    };
+
+    const validated = validate(ListProjectsSchema, validationArgs);
+
+    const filter: ProjectFilter = {
+      kind: validated.kind === 'TASK' ? ProjectKind.TASK : validated.kind === 'NOTE' ? ProjectKind.NOTE : undefined,
+      closed: validated.includeArchived,
       search: args.search,
     };
 
@@ -270,7 +304,8 @@ export class ProjectTools {
   }
 
   private async handleGetProject(args: any): Promise<any> {
-    const project = await this.ticktickClient.projects.getProject(args.projectId);
+    const validated = validate(GetProjectSchema, args);
+    const project = await this.ticktickClient.projects.getProject(validated.projectId);
 
     return {
       content: [
@@ -283,13 +318,28 @@ export class ProjectTools {
   }
 
   private async handleCreateProject(args: any): Promise<any> {
-    const projectData: ProjectCreateRequest = {
-      name: args.name,
-      color: args.color,
-      viewMode: args.viewMode,
-      kind: args.kind,
-      timeline: args.timeline,
+    // Map viewMode to viewType for validation
+    const validationArgs = {
+      ...args,
+      viewType: args.viewMode,
     };
+
+    const validated = validate(CreateProjectSchema, validationArgs);
+
+    const projectData: ProjectCreateRequest = {
+      name: validated.name,
+      color: validated.color,
+      sortOrder: validated.sortOrder,
+      viewMode: validated.viewType as any, // Map back to viewMode
+      kind: validated.kind === 'TASK' ? ProjectKind.TASK : validated.kind === 'NOTE' ? ProjectKind.NOTE : undefined,
+    };
+
+    // Remove undefined values
+    Object.keys(projectData).forEach(key => {
+      if (projectData[key as keyof ProjectCreateRequest] === undefined) {
+        delete projectData[key as keyof ProjectCreateRequest];
+      }
+    });
 
     const project = await this.ticktickClient.projects.createProject(projectData);
 
@@ -297,20 +347,38 @@ export class ProjectTools {
       content: [
         {
           type: 'text',
-          text: `Project created successfully: ${project.name} (ID: ${project.id})`,
+          text: JSON.stringify({
+            message: 'Project created successfully',
+            project: {
+              id: project.id,
+              name: project.name,
+              color: project.color,
+              sortOrder: project.sortOrder,
+              viewMode: project.viewMode,
+              kind: project.kind,
+              closed: project.closed,
+            }
+          }, null, 2),
         },
       ],
     };
   }
 
   private async handleUpdateProject(args: any): Promise<any> {
+    // Map viewMode to viewType for validation
+    const validationArgs = {
+      ...args,
+      viewType: args.viewMode,
+    };
+
+    const validated = validate(UpdateProjectSchema, validationArgs);
+
     const updates: ProjectUpdateRequest = {
-      name: args.name,
-      color: args.color,
-      viewMode: args.viewMode,
-      timeline: args.timeline,
-      closed: args.closed,
-      muted: args.muted,
+      name: validated.name,
+      color: validated.color,
+      sortOrder: validated.sortOrder,
+      viewMode: validated.viewType as any, // Map back to viewMode
+      kind: validated.kind === 'TASK' ? ProjectKind.TASK : validated.kind === 'NOTE' ? ProjectKind.NOTE : undefined,
     };
 
     // Remove undefined values
@@ -320,33 +388,49 @@ export class ProjectTools {
       }
     });
 
-    const project = await this.ticktickClient.projects.updateProject(args.projectId, updates);
+    const project = await this.ticktickClient.projects.updateProject(validated.projectId, updates);
 
     return {
       content: [
         {
           type: 'text',
-          text: `Project updated successfully: ${project.name} (ID: ${project.id})`,
+          text: JSON.stringify({
+            message: 'Project updated successfully',
+            project: {
+              id: project.id,
+              name: project.name,
+              color: project.color,
+              viewMode: project.viewMode,
+              kind: project.kind,
+              sortOrder: project.sortOrder,
+            }
+          }, null, 2),
         },
       ],
     };
   }
 
   private async handleDeleteProject(args: any): Promise<any> {
-    await this.ticktickClient.projects.deleteProject(args.projectId);
+    const validated = validate(DeleteProjectSchema, args);
+    await this.ticktickClient.projects.deleteProject(validated.projectId);
 
     return {
       content: [
         {
           type: 'text',
-          text: `Project deleted successfully (ID: ${args.projectId})`,
+          text: JSON.stringify({
+            message: 'Project deleted successfully',
+            projectId: validated.projectId
+          }, null, 2),
         },
       ],
     };
   }
 
   private async handleGetProjectTasks(args: any): Promise<any> {
-    const tasks = await this.ticktickClient.tasks.getTasksByProject(args.projectId, {
+    const validated = validate(GetProjectTasksSchema, args);
+    
+    const tasks = await this.ticktickClient.tasks.getTasksByProject(validated.projectId, {
       status: args.status,
       priority: args.priority,
     });
@@ -375,14 +459,15 @@ export class ProjectTools {
   }
 
   private async handleGetProjectStats(args: any): Promise<any> {
-    const stats = await this.ticktickClient.projects.getProjectStats(args.projectId);
+    const validated = validate(GetProjectStatsSchema, args);
+    const stats = await this.ticktickClient.projects.getProjectStats(validated.projectId);
 
     return {
       content: [
         {
           type: 'text',
           text: JSON.stringify({
-            projectId: args.projectId,
+            projectId: validated.projectId,
             statistics: stats,
             completionRate: stats.totalTasks > 0 ? 
               Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0,
@@ -393,26 +478,42 @@ export class ProjectTools {
   }
 
   private async handleArchiveProject(args: any): Promise<any> {
-    const project = await this.ticktickClient.projects.archiveProject(args.projectId);
+    const validated = validate(ArchiveProjectSchema, args);
+    const project = await this.ticktickClient.projects.archiveProject(validated.projectId);
 
     return {
       content: [
         {
           type: 'text',
-          text: `Project archived successfully: ${project.name} (ID: ${project.id})`,
+          text: JSON.stringify({
+            message: 'Project archived successfully',
+            project: {
+              id: project.id,
+              name: project.name,
+              closed: project.closed
+            }
+          }, null, 2),
         },
       ],
     };
   }
 
   private async handleUnarchiveProject(args: any): Promise<any> {
-    const project = await this.ticktickClient.projects.unarchiveProject(args.projectId);
+    const validated = validate(UnarchiveProjectSchema, args);
+    const project = await this.ticktickClient.projects.unarchiveProject(validated.projectId);
 
     return {
       content: [
         {
           type: 'text',
-          text: `Project unarchived successfully: ${project.name} (ID: ${project.id})`,
+          text: JSON.stringify({
+            message: 'Project unarchived successfully',
+            project: {
+              id: project.id,
+              name: project.name,
+              closed: project.closed
+            }
+          }, null, 2),
         },
       ],
     };

@@ -2,23 +2,22 @@
  * Task Types for TickTick API
  */
 
-import { TickTickBaseEntity, Tag, Priority, Reminder, Location, Attachment, Comment } from '../common/types.js';
+import { TickTickBaseEntity, Tag, Location, Attachment, Comment } from '../common/types.js';
 
 export interface Task extends TickTickBaseEntity {
   projectId: string;
   title: string;
   content?: string;
   desc?: string;
-  allDay?: boolean;
+  isAllDay?: boolean;
   startDate?: string;
   dueDate?: string;
   timeZone?: string;
-  reminder?: string;
-  reminders?: Reminder[];
-  repeat?: string;
-  priority: Priority;
+  reminders?: string[];
+  repeatFlag?: string;
+  priority: TaskPriority;
   status: TaskStatus;
-  progress: number;
+  progress?: number;
   sortOrder: number;
   items?: ChecklistItem[];
   tags?: Tag[];
@@ -38,12 +37,22 @@ export enum TaskStatus {
   DELETED = -1,
 }
 
+export enum TaskPriority {
+  NONE = 0,
+  LOW = 1,
+  MEDIUM = 3,
+  HIGH = 5,
+}
+
 export interface ChecklistItem {
   id: string;
   title: string;
   status: TaskStatus;
   completedTime?: string;
   sortOrder: number;
+  startDate?: string;
+  isAllDay?: boolean;
+  timeZone?: string;
 }
 
 export interface Subtask extends TickTickBaseEntity {
@@ -59,55 +68,56 @@ export interface TaskCreateRequest {
   title: string;
   content?: string;
   desc?: string;
-  allDay?: boolean;
+  isAllDay?: boolean;
   startDate?: string;
   dueDate?: string;
   timeZone?: string;
-  reminder?: string;
-  reminders?: Omit<Reminder, 'id'>[];
-  repeat?: string;
-  priority?: Priority;
+  reminders?: string[];
+  repeatFlag?: string;
+  priority?: TaskPriority;
   tags?: Tag[];
   assignee?: string;
   location?: Location;
   items?: Omit<ChecklistItem, 'id' | 'completedTime'>[];
+  sortOrder?: number;
 }
 
 export interface TaskUpdateRequest {
+  id?: string;
+  projectId: string; // Required by TickTick API specification
   title?: string;
   content?: string;
   desc?: string;
-  allDay?: boolean;
+  isAllDay?: boolean;
   startDate?: string;
   dueDate?: string;
   timeZone?: string;
-  reminder?: string;
-  reminders?: Reminder[];
-  repeat?: string;
-  priority?: Priority;
+  reminders?: string[];
+  repeatFlag?: string;
+  priority?: TaskPriority;
   status?: TaskStatus;
   progress?: number;
   tags?: Tag[];
   assignee?: string;
   location?: Location;
   items?: ChecklistItem[];
-  projectId?: string; // For moving tasks
   completedTime?: string;
+  sortOrder?: number;
 }
 
 export interface TaskFilter {
+  // Server-side filters (supported by TickTick API through project data)
   projectId?: string;
+  
+  // Client-side filters (applied after fetching from /project/{id}/data)
   status?: TaskStatus;
-  priority?: Priority;
-  assignee?: string;
+  priority?: TaskPriority;
   tags?: string[];
-  startDate?: string;
-  endDate?: string;
   search?: string;
+  startDate?: string;    // Filter by due date >= startDate
+  endDate?: string;      // Filter by due date <= endDate
   completedAfter?: string;
   completedBefore?: string;
-  modifiedAfter?: string;
-  modifiedBefore?: string;
   hasReminder?: boolean;
   hasAttachment?: boolean;
   isOverdue?: boolean;

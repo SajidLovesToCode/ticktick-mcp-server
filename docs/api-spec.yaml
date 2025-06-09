@@ -1,0 +1,439 @@
+openapi: 3.0.3
+info:
+  title: TickTick MCP Server API
+  description: |
+    Model Context Protocol (MCP) server for TickTick task management platform.
+    This API provides comprehensive task and project management capabilities through MCP tools.
+  version: 1.0.0
+  contact:
+    name: TickTick MCP Support
+    url: https://github.com/tsutsuhiro/ticktick-mcp-server
+
+servers:
+  - url: mcp://localhost
+    description: Local MCP server
+
+tags:
+  - name: Authentication
+    description: OAuth 2.1 authentication operations
+  - name: Tasks
+    description: Task management operations
+  - name: Projects
+    description: Project management operations
+
+paths:
+  /tools/ticktick_auth_status:
+    post:
+      tags:
+        - Authentication
+      summary: Check authentication status
+      operationId: checkAuthStatus
+      responses:
+        '200':
+          description: Authentication status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authenticated:
+                    type: boolean
+                  user:
+                    type: object
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+  /tools/ticktick_authorize:
+    post:
+      tags:
+        - Authentication
+      summary: Start OAuth authorization flow
+      operationId: authorize
+      responses:
+        '200':
+          description: Authorization started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+                    format: uri
+
+  /tools/ticktick_list_tasks:
+    post:
+      tags:
+        - Tasks
+      summary: List all tasks with filtering
+      operationId: listTasks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListTasksRequest'
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+
+  /tools/ticktick_create_task:
+    post:
+      tags:
+        - Tasks
+      summary: Create a new task
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '200':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tools/ticktick_update_task:
+    post:
+      tags:
+        - Tasks
+      summary: Update an existing task
+      operationId: updateTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tools/ticktick_list_projects:
+    post:
+      tags:
+        - Projects
+      summary: List all projects
+      operationId: listProjects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListProjectsRequest'
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+
+  /tools/ticktick_create_project:
+    post:
+      tags:
+        - Projects
+      summary: Create a new project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '200':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+components:
+  schemas:
+    Task:
+      type: object
+      required:
+        - id
+        - title
+        - projectId
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+          maxLength: 255
+        content:
+          type: string
+          maxLength: 5000
+        projectId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: ['0', '1', '2']
+          description: '0=Active, 1=Completed, 2=Deleted'
+        priority:
+          type: string
+          enum: ['0', '1', '3', '5']
+          description: '0=None, 1=Low, 3=Medium, 5=High'
+        dueDate:
+          type: string
+          format: date-time
+        startDate:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+        reminders:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reminder'
+        createdTime:
+          type: string
+          format: date-time
+        modifiedTime:
+          type: string
+          format: date-time
+
+    ChecklistItem:
+      type: object
+      required:
+        - title
+        - status
+        - sortOrder
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: ['0', '1']
+        sortOrder:
+          type: number
+
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: string
+        trigger:
+          type: string
+
+    Project:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        sortOrder:
+          type: number
+        closed:
+          type: boolean
+        muted:
+          type: boolean
+        viewType:
+          type: string
+          enum: ['list', 'kanban', 'timeline']
+        kind:
+          type: string
+          enum: ['TASK', 'NOTE']
+        permission:
+          type: string
+          enum: ['read', 'write', 'admin']
+        userCount:
+          type: number
+        createdTime:
+          type: string
+          format: date-time
+        modifiedTime:
+          type: string
+          format: date-time
+
+    CreateTaskRequest:
+      type: object
+      required:
+        - projectId
+        - title
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        content:
+          type: string
+          maxLength: 5000
+        dueDate:
+          type: string
+          format: date-time
+        startDate:
+          type: string
+          format: date-time
+        priority:
+          type: string
+          enum: ['0', '1', '3', '5']
+        tags:
+          type: array
+          items:
+            type: string
+        reminders:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reminder'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+
+    UpdateTaskRequest:
+      type: object
+      required:
+        - taskId
+        - projectId
+      properties:
+        taskId:
+          type: string
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 255
+        content:
+          type: string
+          maxLength: 5000
+        status:
+          type: string
+          enum: ['0', '1', '2']
+        priority:
+          type: string
+          enum: ['0', '1', '3', '5']
+        dueDate:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+
+    ListTasksRequest:
+      type: object
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: ['0', '1', '2']
+        priority:
+          type: string
+          enum: ['0', '1', '3', '5']
+        search:
+          type: string
+        sortBy:
+          type: string
+          enum: ['dueDate', 'priority', 'title', 'createdTime', 'modifiedTime']
+        sortOrder:
+          type: string
+          enum: ['asc', 'desc']
+
+    TaskListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+
+    CreateProjectRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          default: '#4772FA'
+        viewType:
+          type: string
+          enum: ['list', 'kanban', 'timeline']
+          default: 'list'
+        kind:
+          type: string
+          enum: ['TASK', 'NOTE']
+          default: 'TASK'
+
+    ListProjectsRequest:
+      type: object
+      properties:
+        includeArchived:
+          type: boolean
+          default: false
+        kind:
+          type: string
+          enum: ['TASK', 'NOTE']
+        sortBy:
+          type: string
+          enum: ['name', 'sortOrder', 'modifiedTime', 'createdTime']
+          default: 'sortOrder'
+
+    ProjectListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+        field:
+          type: string

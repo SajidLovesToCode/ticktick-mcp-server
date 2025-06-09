@@ -73,15 +73,16 @@ export class ProjectsAPI {
   }> {
     logger.info(`Fetching project statistics: ${projectId}`);
 
-    // TickTick API doesn't provide direct stats endpoint, so we'll calculate from tasks
-    const tasks = await this.apiClient.get<any[]>(`/project/${projectId}/task`);
+    // Get project data which includes tasks
+    const projectData = await this.apiClient.get<any>(`/project/${projectId}/data`);
+    const tasks = projectData?.tasks || [];
     
     const now = new Date();
     const stats = {
       totalTasks: tasks.length,
-      completedTasks: tasks.filter(task => task.status === 2).length,
-      inProgressTasks: tasks.filter(task => task.status === 0).length,
-      overdueTasks: tasks.filter(task => 
+      completedTasks: tasks.filter((task: any) => task.status === 2).length,
+      inProgressTasks: tasks.filter((task: any) => task.status === 0).length,
+      overdueTasks: tasks.filter((task: any) => 
         task.status !== 2 && 
         task.dueDate && 
         new Date(task.dueDate) < now
@@ -95,24 +96,28 @@ export class ProjectsAPI {
   async archiveProject(projectId: string): Promise<Project> {
     logger.info(`Archiving project: ${projectId}`);
     
+    // Archive by updating the project's closed status
     return this.updateProject(projectId, { closed: true });
   }
 
   async unarchiveProject(projectId: string): Promise<Project> {
     logger.info(`Unarchiving project: ${projectId}`);
     
+    // Unarchive by updating the project's closed status
     return this.updateProject(projectId, { closed: false });
   }
 
   async muteProject(projectId: string): Promise<Project> {
     logger.info(`Muting project: ${projectId}`);
     
+    // Mute by updating the project's muted status
     return this.updateProject(projectId, { muted: true });
   }
 
   async unmuteProject(projectId: string): Promise<Project> {
     logger.info(`Unmuting project: ${projectId}`);
     
+    // Unmute by updating the project's muted status
     return this.updateProject(projectId, { muted: false });
   }
 }

@@ -21,6 +21,10 @@ build/
 # OAuth configuration
 ticktick-oauth.keys.json
 
+# Credentials and tokens (VERY IMPORTANT - NEVER COMMIT)
+.ticktick-mcp-server-credentials.json
+*-credentials.json
+
 # Logs
 logs/
 *.log
@@ -117,3 +121,7 @@ temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# other files
+PUBLISH_CHECKLIST.md
+CLAUDE.md

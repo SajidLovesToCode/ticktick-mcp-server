@@ -59,7 +59,7 @@ export class OAuthManager {
       const port = parseInt(url.port) || 8080;
 
       server.listen(port, () => {
-        console.log(`Callback server listening on port ${port}`);
+        // Server is listening - auth URL will open automatically
         open(authorizationUri);
       });
 

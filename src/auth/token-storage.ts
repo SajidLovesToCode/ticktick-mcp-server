@@ -1,125 +1,82 @@
 /**
- * Secure Token Storage using OS Keychain
+ * Simple Token Storage using JSON file
  */
 
-import keytar from 'keytar';
-import CryptoJS from 'crypto-js';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { TokenInfo } from './oauth-manager.js';
+import { logger } from '../utils/logger.js';
 
-const SERVICE_NAME = 'ticktick-mcp-server';
-const ACCOUNT_NAME = 'oauth-tokens';
+const CREDENTIALS_FILE = '.ticktick-mcp-server-credentials.json';
 
 export class TokenStorage {
-  private encryptionKey: string;
+  private credentialsPath: string;
 
   constructor() {
-    this.encryptionKey = process.env.ENCRYPTION_KEY || this.generateEncryptionKey();
-  }
-
-  private generateEncryptionKey(): string {
-    return CryptoJS.lib.WordArray.random(256 / 8).toString();
-  }
-
-  private encrypt(data: string): string {
-    return CryptoJS.AES.encrypt(data, this.encryptionKey).toString();
-  }
-
-  private decrypt(encryptedData: string): string {
-    const bytes = CryptoJS.AES.decrypt(encryptedData, this.encryptionKey);
-    return bytes.toString(CryptoJS.enc.Utf8);
+    // Priority order:
+    // 1. Environment variable TICKTICK_CREDENTIALS_PATH
+    // 2. User's home directory
+    // 3. Current working directory (fallback)
+    
+    if (process.env.TICKTICK_CREDENTIALS_PATH) {
+      this.credentialsPath = process.env.TICKTICK_CREDENTIALS_PATH;
+    } else {
+      try {
+        const home = homedir();
+        this.credentialsPath = join(home, CREDENTIALS_FILE);
+      } catch (error) {
+        logger.warn('Unable to determine home directory, using current directory');
+        this.credentialsPath = join(process.cwd(), CREDENTIALS_FILE);
+      }
+    }
   }
 
   async saveToken(tokenInfo: TokenInfo): Promise<void> {
     try {
-      const tokenData = JSON.stringify({
+      const tokenData = {
         ...tokenInfo,
         expiresAt: tokenInfo.expiresAt?.toISOString(),
-      });
+      };
 
-      const encryptedData = this.encrypt(tokenData);
-      await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, encryptedData);
+      await fs.writeFile(this.credentialsPath, JSON.stringify(tokenData, null, 2));
+      logger.info(`Credentials saved to ${this.credentialsPath}`);
     } catch (error) {
-      console.warn('Failed to save token to keychain, using fallback storage');
-      // Fallback to environment variable or file storage if keytar fails
-      await this.saveTokenFallback(tokenInfo);
+      logger.error('Failed to save credentials:', error);
+      throw error;
     }
   }
 
   async getToken(): Promise<TokenInfo | null> {
     try {
-      const encryptedData = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
-      
-      if (!encryptedData) {
-        return await this.getTokenFallback();
-      }
-
-      const decryptedData = this.decrypt(encryptedData);
-      const tokenData = JSON.parse(decryptedData);
+      const data = await fs.readFile(this.credentialsPath, 'utf-8');
+      const tokenData = JSON.parse(data);
 
       return {
         ...tokenData,
         expiresAt: tokenData.expiresAt ? new Date(tokenData.expiresAt) : undefined,
       };
     } catch (error) {
-      console.warn('Failed to retrieve token from keychain, using fallback storage');
-      return await this.getTokenFallback();
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        // File doesn't exist, return null
+        return null;
+      }
+      
+      logger.error('Failed to read credentials:', error);
+      return null;
     }
   }
 
   async clearToken(): Promise<void> {
     try {
-      await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+      await fs.unlink(this.credentialsPath);
+      logger.info(`Credentials cleared from ${this.credentialsPath}`);
     } catch (error) {
-      console.warn('Failed to clear token from keychain');
-    }
-
-    // Also clear fallback storage
-    await this.clearTokenFallback();
-  }
-
-  // Fallback storage methods for environments where keytar doesn't work
-  private async saveTokenFallback(tokenInfo: TokenInfo): Promise<void> {
-    // In a real implementation, you might want to use a secure file storage
-    // For now, we'll just store in memory or environment
-    const tokenData = JSON.stringify({
-      ...tokenInfo,
-      expiresAt: tokenInfo.expiresAt?.toISOString(),
-    });
-
-    process.env.TICKTICK_FALLBACK_TOKEN = this.encrypt(tokenData);
-  }
-
-  private async getTokenFallback(): Promise<TokenInfo | null> {
-    const encryptedData = process.env.TICKTICK_ACCESS_TOKEN || process.env.TICKTICK_FALLBACK_TOKEN;
-    
-    if (!encryptedData) {
-      return null;
-    }
-
-    try {
-      // If it's just a plain access token (from environment)
-      if (!encryptedData.includes(':')) {
-        return {
-          accessToken: encryptedData,
-          tokenType: 'Bearer',
-        };
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        // File doesn't exist, nothing to clear
+        return;
       }
-
-      // If it's encrypted token data
-      const decryptedData = this.decrypt(encryptedData);
-      const tokenData = JSON.parse(decryptedData);
-
-      return {
-        ...tokenData,
-        expiresAt: tokenData.expiresAt ? new Date(tokenData.expiresAt) : undefined,
-      };
-    } catch (error) {
-      console.warn('Failed to parse fallback token data');
-      return null;
+      logger.error('Failed to clear credentials:', error);
     }
-  }
-
-  private async clearTokenFallback(): Promise<void> {
-    delete process.env.TICKTICK_FALLBACK_TOKEN;
   }
 }

@@ -31,34 +31,39 @@ export class Logger {
 
   private formatMessage(level: string, message: string, ...args: any[]): string {
     const timestamp = new Date().toISOString();
-    const formattedArgs = args.length > 0 ? ' ' + args.map(arg => 
-      typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-    ).join(' ') : '';
+    const formattedArgs = args.length > 0 ? ' ' + args.map(arg => {
+      try {
+        return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+      } catch (error) {
+        // Handle circular references or other JSON.stringify errors
+        return '[Circular or Non-Serializable Object]';
+      }
+    }).join(' ') : '';
     
     return `[${timestamp}] [${level}] ${message}${formattedArgs}`;
   }
 
   error(message: string, ...args: any[]): void {
     if (this.shouldLog(LogLevel.ERROR)) {
-      console.error(this.formatMessage('ERROR', message, ...args));
+      process.stderr.write(this.formatMessage('ERROR', message, ...args) + '\n');
     }
   }
 
   warn(message: string, ...args: any[]): void {
     if (this.shouldLog(LogLevel.WARN)) {
-      console.warn(this.formatMessage('WARN', message, ...args));
+      process.stderr.write(this.formatMessage('WARN', message, ...args) + '\n');
     }
   }
 
   info(message: string, ...args: any[]): void {
     if (this.shouldLog(LogLevel.INFO)) {
-      console.info(this.formatMessage('INFO', message, ...args));
+      process.stderr.write(this.formatMessage('INFO', message, ...args) + '\n');
     }
   }
 
   debug(message: string, ...args: any[]): void {
     if (this.shouldLog(LogLevel.DEBUG)) {
-      console.debug(this.formatMessage('DEBUG', message, ...args));
+      process.stderr.write(this.formatMessage('DEBUG', message, ...args) + '\n');
     }
   }
 }

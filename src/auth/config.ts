@@ -23,9 +23,7 @@ export const DEFAULT_OAUTH_URLS: OAuthUrls = {
 
 export const DEFAULT_SCOPES = [
   'tasks:read',
-  'tasks:write',
-  'projects:read',
-  'projects:write'
+  'tasks:write'
 ];
 
 export const DEFAULT_REDIRECT_URI = 'http://localhost:8080/callback';

@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ErrorCode,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -41,19 +42,52 @@ export class TickTickMCPServer {
   private async initializeTickTickClient(): Promise<void> {
     try {
       this.ticktickClient = new TickTickClient();
+      logger.info('TickTick client created successfully');
+      
       await this.ticktickClient.initialize();
       this.toolsManager = new ToolsManager(this.ticktickClient);
       logger.info('TickTick client initialized successfully');
     } catch (error) {
+      // Always create the client even if initialization fails
+      // This allows auth tools to work
+      if (!this.ticktickClient) {
+        try {
+          this.ticktickClient = new TickTickClient();
+          logger.info('Created TickTick client without initialization');
+        } catch (configError) {
+          logger.error('Failed to create TickTick client - configuration error:', configError);
+          if (configError instanceof ConfigurationError) {
+            logger.error('Configuration Error:', configError.message);
+            logger.error('Please check:');
+            logger.error('1. Your ticktick-oauth.keys.json file exists');
+            logger.error('2. Environment variables TICKTICK_CLIENT_ID and TICKTICK_CLIENT_SECRET are set');
+            logger.error('3. Run "npm run start auth" to authenticate first');
+          }
+          throw configError;
+        }
+      }
+      
       if (error instanceof ConfigurationError) {
-        logger.error('Configuration error:', error.message);
-        throw error;
+        logger.warn('Configuration error - authentication not yet completed');
+        logger.warn('No valid authentication token found.');
+        logger.warn('Please run "npm run start auth" to authenticate first.');
+        // Don't throw - let auth tools handle it
       } else if (error instanceof AuthenticationError) {
-        logger.warn('Authentication required:', error.message);
+        logger.warn('Authentication required - no valid token found');
+        logger.warn('Authentication required.');
+        logger.warn('Please run "npm run start auth" to authenticate first.');
         // We'll handle this gracefully - tools will guide user to authenticate
       } else {
-        logger.error('Failed to initialize TickTick client:', error);
+        logger.error('Failed to initialize TickTick client - unexpected error:', error);
+        logger.error('Unexpected error during initialization:', error);
         throw error;
+      }
+      
+      // Always create ToolsManager even if authentication fails
+      // This allows tools to return proper error messages
+      if (this.ticktickClient && !this.toolsManager) {
+        this.toolsManager = new ToolsManager(this.ticktickClient);
+        logger.info('Created ToolsManager for non-authenticated client');
       }
     }
   }
@@ -102,6 +136,14 @@ export class TickTickMCPServer {
         tools: [...baseTools, ...additionalTools],
       };
     });
+
+    // Resources handler
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: [],
+      };
+    });
+
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
