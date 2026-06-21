@@ -327,17 +327,34 @@ export class TickTickMCPServer {
     if (process.env.PORT) {
       const app = express();
       app.use(cors());
+      app.use(express.json());
       const port = parseInt(process.env.PORT, 10);
-      let transport: SSEServerTransport | null = null;
+      const transports = new Map<string, SSEServerTransport>();
 
       app.get('/sse', async (req, res) => {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
-        transport = new SSEServerTransport('/message', res);
+        res.flushHeaders();
+
+        const transport = new SSEServerTransport('/message', res);
+        const sessionId = transport.sessionId;
+        transports.set(sessionId, transport);
+
         await this.server.connect(transport);
-        req.on('close', () => { transport = null; });
+
+        req.on('close', () => {
+          transports.delete(sessionId);
+        });
       });
 
       app.post('/message', async (req, res) => {
+        const sessionId = req.query.sessionId as string;
+        const transport = sessionId
+        ? transports.get(sessionId)
+        : transports.values().next().value;
+
         if (transport) {
           await transport.handlePostMessage(req, res);
         } else {
