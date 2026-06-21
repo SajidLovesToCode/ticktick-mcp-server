@@ -16,6 +16,7 @@ import { ToolsManager } from './tools/index.js';
 import { logger } from './utils/logger.js';
 import { ConfigurationError, AuthenticationError } from './utils/errors.js';
 import express from 'express';
+import cors from 'cors';
 import {SSEServerTransport} from '@modelcontextprotocol/sdk/server/sse.js';
 export class TickTickMCPServer {
   private server: Server;
@@ -325,10 +326,12 @@ export class TickTickMCPServer {
 
     if (process.env.PORT) {
       const app = express();
+      app.use(cors());
       const port = parseInt(process.env.PORT, 10);
       let transport: SSEServerTransport | null = null;
 
       app.get('/sse', async (req, res) => {
+        res.setHeader('X-Accel-Buffering', 'no');
         transport = new SSEServerTransport('/message', res);
         await this.server.connect(transport);
         req.on('close', () => { transport = null; });

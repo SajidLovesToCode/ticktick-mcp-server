@@ -27,9 +27,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "axios": "^1.6.0",
     "conf": "^12.0.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.3.0",
     "express": "^5.2.1",
     "open": "^10.0.0",
