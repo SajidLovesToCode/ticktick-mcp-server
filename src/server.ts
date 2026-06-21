@@ -15,7 +15,8 @@ import { TickTickClient } from './api/ticktick-client.js';
 import { ToolsManager } from './tools/index.js';
 import { logger } from './utils/logger.js';
 import { ConfigurationError, AuthenticationError } from './utils/errors.js';
-
+import express from 'express';
+import {SSEServerTransport} from '@modelcontextprotocol/sdk/server/sse.js';
 export class TickTickMCPServer {
   private server: Server;
   private ticktickClient?: TickTickClient;
@@ -315,17 +316,38 @@ export class TickTickMCPServer {
 
   async start(): Promise<void> {
     logger.info('Starting TickTick MCP Server...');
-    
+
     try {
       await this.initializeTickTickClient();
     } catch (error) {
-      // Log the error but continue - some tools can still work
-      logger.warn('TickTick client initialization failed, some tools may not work:', error);
+      logger.warn('TickTick client initialization failed:', error);
     }
 
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    
-    logger.info('TickTick MCP Server started successfully');
+    if (process.env.PORT) {
+      const app = express();
+      const port = parseInt(process.env.PORT, 10);
+      let transport: SSEServerTransport | null = null;
+
+      app.get('/sse', async (req, res) => {
+        transport = new SSEServerTransport('/message', res);
+        await this.server.connect(transport);
+        req.on('close', () => { transport = null; });
+      });
+
+      app.post('/message', async (req, res) => {
+        if (transport) {
+          await transport.handlePostMessage(req, res);
+        } else {
+          res.status(400).send('No active SSE connection');
+        }
+      });
+
+      app.listen(port, () => {
+        logger.info('SSE server listening on port ' + port);
+      });
+    } else {
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+    }
   }
 }
