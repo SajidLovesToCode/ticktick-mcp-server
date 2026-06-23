@@ -341,6 +341,9 @@ export class TickTickMCPServer {
 
         await this.server.connect(transport);
 
+        // Force the proxy to release the buffered stream
+        res.write(': keepalive\n\n');
+
         req.on('close', () => {
           transports.delete(sessionId);
         });
