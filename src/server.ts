@@ -332,6 +332,9 @@ export class TickTickMCPServer {
       const transports = new Map<string, SSEServerTransport>();
 
       app.get('/sse', async (req, res) => {
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.setHeader('CF-Cache-Control', 'no-transform');
+
         const transport = new SSEServerTransport('/message', res);
         const sessionId = transport.sessionId;
         transports.set(sessionId, transport);
