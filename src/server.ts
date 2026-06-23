@@ -346,14 +346,13 @@ export class TickTickMCPServer {
 
       app.post('/message', async (req, res) => {
         const sessionId = req.query.sessionId as string;
-        const transport = sessionId
-        ? transports.get(sessionId)
-        : transports.values().next().value;
-
+        if (!sessionId) { res.status(400).send('Session ID is required'); return; }
+        const transport = transports.get(sessionId);
         if (transport) {
           await transport.handlePostMessage(req, res);
         } else {
-          res.status(400).send('No active SSE connection');
+          console.error('No transport found for session: ${sessionId}');
+          res.status(400).send('No active SSE connection for this session');
         }
       });
 
