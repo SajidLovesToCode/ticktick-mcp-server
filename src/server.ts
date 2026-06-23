@@ -332,18 +332,18 @@ export class TickTickMCPServer {
       const transports = new Map<string, SSEServerTransport>();
 
       app.get('/sse', async (req, res) => {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
+        const transport = new SSEServerTransport('/message', res);
+
         res.setHeader('X-Accel-Buffering', 'no');
 
-        const transport = new SSEServerTransport('/message', res);
+        res.flushHeaders();
+
         const sessionId = transport.sessionId;
         transports.set(sessionId, transport);
 
-        res.write(': keepalive\n\n');
-
         await this.server.connect(transport);
+
+        res.write(': keepalive\n\n');
 
         req.on('close', () => {
           transports.delete(sessionId);
