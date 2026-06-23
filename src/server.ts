@@ -339,10 +339,10 @@ export class TickTickMCPServer {
         const sessionId = transport.sessionId;
         transports.set(sessionId, transport);
 
-        await this.server.connect(transport);
-
-        // Force the proxy to release the buffered stream
+        // Write BEFORE connect() so the proxy gets a byte immediately
         res.write(': keepalive\n\n');
+
+        await this.server.connect(transport);
 
         req.on('close', () => {
           transports.delete(sessionId);
