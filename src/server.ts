@@ -334,11 +334,13 @@ export class TickTickMCPServer {
       app.get('/sse', async (req, res) => {
         res.setHeader('X-Accel-Buffering', 'no');
         res.setHeader('CF-Cache-Control', 'no-transform');
+
         const transport = new SSEServerTransport('/message', res);
-        res.flushHeaders();
         const sessionId = transport.sessionId;
         transports.set(sessionId, transport);
+
         await this.server.connect(transport);
+
         req.on('close', () => {
           transports.delete(sessionId);
         });
@@ -351,7 +353,7 @@ export class TickTickMCPServer {
         if (transport) {
           await transport.handlePostMessage(req, res);
         } else {
-          console.error('No transport found for session: ${sessionId}');
+          console.error(`No transport found for session: ${sessionId}`);
           res.status(400).send('No active SSE connection for this session');
         }
       });
